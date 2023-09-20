@@ -1,16 +1,21 @@
+# DWave imports which we use to perform the quantum annealing
 from dwave.system import DWaveSampler, EmbeddingComposite, LeapHybridSampler
-import dwave.inspector
 from dimod import BinaryQuadraticModel, ExactSolver
-import networkx as nx
 
-import matplotlib.pyplot as plt
-
+# Flask import so that the API is accessible
 from flask import Flask, request
 
+# Creating the Flask app object
 app = Flask(__name__)
 
-@app.route("/home")
+# Creating the /route path (if the a request is made to the /route path, main() will run)
+@app.route("/route")
 def main():
+
+    # Defining functions for use later in main() function
+
+    # Cycle search is used when defining constraints. It traverses the graph that represents the map of the city and finds enough cycles (or loops)
+    # for the program to use later on
     def cycle_search(curr_node, curr_edge_list, visited_queue):
             # check if cycle is detected, if so add it to cycles list and delete that part of the queue
             if curr_node in visited_queue:
@@ -22,6 +27,8 @@ def main():
             
             # run cycle search on all other nodes
             visited_queue.append(curr_node)
+
+            # recurse through other nodes, modifying the lists as necessary
             while True:
                 if len(curr_edge_list[curr_node-1]):
                     edge = curr_edge_list[curr_node - 1][0]
@@ -30,9 +37,12 @@ def main():
                     curr_edge_list[next_node - 1].remove("X_"+str(next_node)+"_"+str(curr_node))
                     cycle_search(next_node, curr_edge_list, visited_queue)
                 else:
+                    # end this function if it is currently at a dead end (this will cause the function to continue running on the previous node)
                     break
             return
 
+    # A function to remove duplicate values from the edges list. The duplicate values are necessary for detecting cycles and other functions, but are not
+    # needed for the final result
     def remove_duplicates():
         to_remove = []
         for i in range(len(edges)):
@@ -48,6 +58,9 @@ def main():
                 edges[i].remove(to_remove[j])
             to_remove = []
 
+    # A function that adds constraings to the quantum algorithm (commonly called Quadratic Unconstrained Binary Object or QUBO).
+    # The constraints work by enforcing a certain number of items within a list. e.x. for the first example, we simply create a list with all the edges
+    # and tell the quantum annealer how many of the edges in that list should be equal to 1 (or selected for the final path)
     def add_constraints():
         # constraint 1: there will be num_nodes - 1 edges
         # generate c1 list, which includes all possible edges, each with a bias of 1
@@ -92,37 +105,27 @@ def main():
                 constant = -(len(cycles[i]) - 1),
                 lagrange_multiplier = 4000,
             )
-        # constraint 3:
-        # for i in range(len(nodes)):
-        #     c3 = []
-        #     for j in range(len(edges)):
-        #         if (int(edges[j].split('_')[1]) == nodes[i] and depths[nodes.index(nodes[i])] > depths[nodes.index(int(edges[j].split('_')[2]))]):
-        #             print("appending: ", int(edges[j].split('_')[1]), " or ", int(edges[j].split('_')[2]), " from ", edges[j].split('_'))
-        #             c3.append((edges[j], 1))
-        #         elif (int(edges[j].split('_')[2]) == nodes[i] and depths[nodes.index(nodes[i])] > depths[nodes.index(int(edges[j].split('_')[1]))]):
-        #             print("appending: ", int(edges[j].split('_')[1]), " or ", int(edges[j].split('_')[2]), " from ", edges[j].split('_'))
-        #             c3.append((edges[j], 1))
-        #     print("c3_"+str(i)+": ", c3)
-        #     if (len(c3) != 0):
-        #         bqm.add_linear_inequality_constraint(
-        #             c3,
-        #             lb = 1,
-        #             ub = len(c3),
-        #             lagrange_multiplier = 1000,
-        #             label = "c3_"+str(i + 1)
-        #         )
+
+    # Getting request data using Flask (these are the inputs)
     json = request.get_json()
+    public_transportation = json["public_transportation"]
     input_edges = json["edges"]
     num_nodes = json["num_nodes"]
+    # Setting up lists that will be populated as we parse the inputs
     edges = [[] for i in range(num_nodes)]
     distances = [[] for i in range(num_nodes)]
-    resistances = [[] for i in range(num_nodes)]
+    # go through each edge string in the input. Inputs are strucutred like this:
+    # node1 node2 distance
+    # So we can split the string to seperate the nodes and the distances between them, giving us information on the edge.
+    # The nodes will primarily represent intersections and large points of interest and the edges are the roads/paths between them.
     for edge in input_edges:
+        # splitting the input string using a python string method
         edge = edge.split()
         node1 = int(edge[0])
         node2 = int(edge[1])
         distance = float(edge[2])
-        resistance = float(edge[3])
+        transport_mode = float(edge[3])
+        # error checks making sure the input data is valid
         if (node1 == node2):
             return("node1 and node2 cannot be the same")
             continue
@@ -143,43 +146,57 @@ def main():
             return("edge already contained in list")
             continue
         
+        # appending the input data to the apprioate list
+        # the lists are structured as a 2d array, where each edge is put into the sub-list with the index of its starting node. 
+        # (edge 1 to 2 would be put in the first sub-array, or array with index 0)
+        # this is to make running other functions (specifically search functions more efficient later on)
         edges[node1-1].append(f"X_{node1}_{node2}")
         edges[node2-1].append(f"X_{node2}_{node1}")
         distances[node1-1].append(distance)
         distances[node2-1].append(distance)
-        resistances[node1-1].append(resistance)
-        resistances[node2-1].append(resistance)
 
+    # running the cycle search algorithm
     cycles = []
     cycle_search(1, [x[:] for x in edges], [])
-    print(cycles)
+    # removing the duplicates in the lists
     remove_duplicates()
-    print(edges)
 
-    # Initialise BQM
+    # Initialise BQM (Binary Quadratic Model) which we will use to sample (run) the quantum annealer on our data.
     bqm = BinaryQuadraticModel("BINARY")
 
-    distance_scalar = 100
-    resistance_scalar = 3
+    # definding scalars for how the different properties of roads will factor into the program. 
+    # The higher the scalar -> the more important the property -> the more it affects the final result
+    distance_scalar = 5
+    resistance_scalar = 1000
 
-    # # objective: min(sum of the distances of the edges)
+    # defining the objective function, which tells the quantum annealer what variables to minimise. 
+    # This is done by summing up all the proprties into one final weight, which is then minimised by the annealer
+    # objective: min(sum of the distances of the edges)
     for i in range(len(edges)):
         for j in range(len(edges[i])):
-            bqm.add_variable(edges[i][j], distance_scalar * distances[i][j] + resistance_scalar * resistances[i][j])
+
+            # TODO: add weight for how many other uber drivers are on that path
+            # TODO: add negative weight for demand on that path
+            bqm.add_variable(edges[i][j], distance_scalar * distances[i][j])
 
     add_constraints()
 
+    # Sample using DWave QPU
     #sampler = EmbeddingComposite(DWaveSampler())
     #response = sampler.sample(bqm, num_reads=1000)
 
+    # Sample using your local machine (simulates quantum processes)
     sampler = ExactSolver()
     response = sampler.sample(bqm)
 
+    # Sample using hybrid sampler, generally the most efficient approach when working with large datasets
     # sampler = LeapHybridSampler(token="DEV-c9a363b31191890cb20b75ad57be0b71b583f88d")
     # response = sampler.sample(bqm)
-    print(response.first.sample)
-    print(type(response.first.sample))
+
+    # converting the values in the output dictionary to python integers since the default type of the values (int8) is not JSON serialisable.
     output = response.first.sample
     for key in output.keys():
         output[key] = int(output[key])
+    
+    # Return the output, serving the data to whatever made the request.
     return output
