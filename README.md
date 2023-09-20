@@ -31,6 +31,6 @@ The data has to be sent along with a request body, made up of JSON with two prop
 ```num_nodes``` is simply the number of nodes (or points to reach) that will be in the final graph.\
 ```edges``` is a list of road data provided in the form:\
 "point1 point2 property1 property2 property3"\
-The points are the two edges of the segment of road being entered. The properties are the aspects of that leg of the journey that should be taken into consideration. Here they would be, time spent on that road, due to distance and traffic, number of other uber drivers on or close to that road, and the demand on that road.
+The points are the two edges of the segment of road being entered. The properties are the aspects of that leg of the journey that should be taken into consideration. Here they would be, time spent on that road, due to time and traffic, number of other uber drivers on or close to that road, and the demand on that road.
 
 All this data can be easily provided by Uber.

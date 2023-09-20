@@ -112,38 +112,36 @@ def main():
     num_nodes = json["num_nodes"]
     # Setting up lists that will be populated as we parse the inputs
     edges = [[] for i in range(num_nodes)]
-    distances = [[] for i in range(num_nodes)]
+    times = [[] for i in range(num_nodes)]
+    other_drivers_list = [[] for i in range(num_nodes)]
+    demands = [[] for i in range(num_nodes)]
     # go through each edge string in the input. Inputs are strucutred like this:
-    # node1 node2 distance
-    # So we can split the string to seperate the nodes and the distances between them, giving us information on the edge.
+    # node1 node2 time
+    # So we can split the string to seperate the nodes and the times between them, giving us information on the edge.
     # The nodes will primarily represent intersections and large points of interest and the edges are the roads/paths between them.
     for edge in input_edges:
         # splitting the input string using a python string method
         edge = edge.split()
         node1 = int(edge[0])
         node2 = int(edge[1])
-        distance = float(edge[2])
-        transport_mode = float(edge[3])
+        time = float(edge[2])
+        other_drivers = float(edge[3])
+        demand = float(edge[4])
         # error checks making sure the input data is valid
         if (node1 == node2):
             return("node1 and node2 cannot be the same")
-            continue
         # if the first node is out of bounds, error then continue
         if (node1 > num_nodes or node1 < 1):
             return("node 1 is out of bounds")
-            continue
         # if the second node isout of bounds, error then continue
         if (node2 > num_nodes or node2 < 1):
             return("node 2 is out of bounds")
-            continue
         # if the edge is already in the list, error then continue
         if (f"X_{node1}_{node1}" in edges):
             return("edge already contained in list")
-            continue
         # if the same edge, just from node2 to node1 is in the list, error then continue
         if (f"X_{node2}_{node1}" in edges):
             return("edge already contained in list")
-            continue
         
         # appending the input data to the apprioate list
         # the lists are structured as a 2d array, where each edge is put into the sub-list with the index of its starting node. 
@@ -151,8 +149,12 @@ def main():
         # this is to make running other functions (specifically search functions more efficient later on)
         edges[node1-1].append(f"X_{node1}_{node2}")
         edges[node2-1].append(f"X_{node2}_{node1}")
-        distances[node1-1].append(distance)
-        distances[node2-1].append(distance)
+        times[node1-1].append(time)
+        times[node2-1].append(time)
+        other_drivers_list[node1-1].append(other_drivers)
+        other_drivers_list[node2-1].append(other_drivers)
+        demands[node1-1].append(demand)
+        demands[node2-1].append(demand)
 
     # running the cycle search algorithm
     cycles = []
@@ -165,18 +167,21 @@ def main():
 
     # definding scalars for how the different properties of roads will factor into the program. 
     # The higher the scalar -> the more important the property -> the more it affects the final result
-    distance_scalar = 5
-    resistance_scalar = 1000
+    time_scalar = 10
+    other_drivers_scalar = 20
+    demand_scalar = 20
 
     # defining the objective function, which tells the quantum annealer what variables to minimise. 
     # This is done by summing up all the proprties into one final weight, which is then minimised by the annealer
-    # objective: min(sum of the distances of the edges)
+    # objective: min(sum of the times of the edges)
     for i in range(len(edges)):
         for j in range(len(edges[i])):
 
             # TODO: add weight for how many other uber drivers are on that path
             # TODO: add negative weight for demand on that path
-            bqm.add_variable(edges[i][j], distance_scalar * distances[i][j])
+            bqm.add_variable(edges[i][j], time_scalar * times[i][j] 
+                                        + other_drivers_scalar * other_drivers_list[i][j]
+                                        + demand_scalar * demands[i][j])
 
     add_constraints()
 
