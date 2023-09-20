@@ -108,7 +108,6 @@ def main():
 
     # Getting request data using Flask (these are the inputs)
     json = request.get_json()
-    public_transportation = json["public_transportation"]
     input_edges = json["edges"]
     num_nodes = json["num_nodes"]
     # Setting up lists that will be populated as we parse the inputs
