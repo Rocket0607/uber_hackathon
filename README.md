@@ -19,3 +19,5 @@ To install the Dwave Ocean SDK:\
 
 Once everything is installed, in the root of the repository, run:\
 ```flask --app main.py run```\
+
+Now requests can be made to the code.
